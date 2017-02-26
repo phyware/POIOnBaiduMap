@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="initial-scale=1.0, user-scalable=no" />
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<title>在百度地图中显示列表中的POI</title>
+<meta name="description" content="Upload a file containing POI, show in Baidu Map" />
+<meta name="description" content="上传POI文件, 在百度地图中显示" />
+<meta name="description" content="自带: 工银亚洲内地见证网点-北上广深" />
+
+<style type="text/css">
+    html{height:100%}
+    body{height:100%;margin:0px;padding:0px}
+    #container{height:90%}
+    #poilist{width: 100%;}
+</style>
+<script src="http://api.map.baidu.com/api?v=1.4" type="text/javascript"></script>
+
+<script type="text/javascript" src="http://api.map.baidu.com/library/SearchInfoWindow/1.5/src/SearchInfoWindow_min.js"></script>
+<link rel="stylesheet" href="http://api.map.baidu.com/library/SearchInfoWindow/1.5/src/SearchInfoWindow_min.css" />
+</head>
+
+<body>
+    <div id="container"></div>
+    <div style="height: 10%; overflow: auto">
+        <div>
+            <select stype="float:left" id="Preset">
+                <option value="" disabled="disabled" selected="selected">请选择预设列表</option>
+                <option value="Data/ICBCAsia.Beijing.txt">工银亚洲-北京</option>
+                <option value="Data/ICBCAsia.Shanghai.txt">工银亚洲-上海</option>
+                <option value="Data/ICBCAsia.Guangzhou.txt">工银亚洲-广州</option>
+                <option value="Data/ICBCAsia.Shenzhen.txt">工银亚洲-深圳</option>
+                <option value="Data/CMBCN.Guangzhou.txt">华商银行-广州</option>
+                <option value="Data/CMBCN.Shenzhen.txt">华商银行-深圳</option>
+            </select>
+            或者
+            <input type="file" id="Upload"/>
+        <div>
+        <div id="poilist"></div>
+    </div>
+
+<script type="text/javascript">
+    var map = new BMap.Map("container");
+    map.enableScrollWheelZoom();
+    map.addControl(new BMap.MapTypeControl());
+    map.addControl(new BMap.GeolocationControl());
+    var curCity = new BMap.LocalCity();
+    curCity.get(function(result) {
+        var cityName = result.name;
+        map.centerAndZoom(cityName, 14);
+    });
+
+    var index  = 0;
+    var queries = [];
+    var pois = [];
+    var noResultQueries = [];
+
+    var options = {
+        onSearchComplete: function(resultsArray){
+            // if (local.getStatus() == BMAP_STATUS_SUCCESS){
+            if (resultsArray) {
+                for (var i = 0; i < resultsArray.length; i++)
+                {
+                    var results = resultsArray[i];
+                    if (results.getCurrentNumPois() >= 1) {
+                        var poi = results.getPoi(0);
+                        poi.rawQuery = results.keyword;
+                        // console.log(poi.title)
+                        pois.push(poi);
+                    }
+                    else {
+                        noResultQueries.push(results.keyword);
+                    }
+                }
+            }
+
+            getLocalPerBatch();
+        }
+    };
+    var local = new BMap.LocalSearch(map, options);
+
+    function readAndShow(file) {
+        if (file == undefined && file.type.match(textType)) { return; }
+
+        readFile(file, getLocalResults);
+    }
+
+    function readFile(file, callback) {
+        var reader = new FileReader();
+        reader.onload = function(progressEvent){
+            var lines = this.result.replace('\t', ' ').split('\n');
+            callback(lines);
+        };
+
+        reader.readAsText(file);
+    }
+
+    function readUri(path, callback) {
+        // bypass cache
+        path = path + "?rnd=" + new Date().getTime();
+        var xhr = new XMLHttpRequest(); 
+        xhr.open("GET", path); 
+        xhr.responseType = "blob";//force the HTTP response, response-type header to be blob
+        xhr.onload = function() 
+        {
+            var blob = xhr.response;//xhr.response is now a blob object
+            callback(blob);
+        }
+        xhr.send();
+    }
+
+    document.getElementById('Upload').onchange = function() {
+        var file = this.files[0];
+        readAndShow(file);
+    };
+
+    document.getElementById('Preset').onchange = function() {
+        readUri(this.value, readAndShow);
+    };
+
+    function getLocalResults(lines) {
+        // first line is target city
+        city = lines[0];
+        map.setCenter(city);
+
+        // sleep half second to let setCenter finish
+        setTimeout(function() {
+            console.log(map.getCenter());
+
+            queries = [];
+            for (var i = 1; i < lines.length; i++) {
+                queries.push(lines[i]);
+            }
+            noResultQueries = [];
+            index = 0;
+            pois = [];
+            map.clearOverlays();
+
+            getLocalPerBatch();
+        }, 500);
+    }
+
+    function getLocalPerBatch() {
+        document.getElementById('poilist').innerHTML = "已完成: " + index + "/" + queries.length
+            + "<br/>"
+            + "无结果的查询: " + noResultQueries.length
+            + "<br/>"
+            + noResultQueries.join("<br/>");
+
+        if (index < queries.length) {
+            var batch = [];
+            var BATCHSIZE = 10;
+            var end = index + BATCHSIZE;
+            for (; index < queries.length && index < end; index++) {
+                batch.push(queries[index]);
+            }
+            local.search(batch);
+        }
+        else {
+            console.log(pois);
+            showPOIs();
+        }
+    }
+
+    function showPOIs() {
+        for (var i = 0; i < pois.length; i++) {
+            var poi = pois[i];
+            addMark(poi);
+        }
+
+        firstPOI = pois[0];
+        if (firstPOI) {
+            if (pois.length <= 2) {
+                map.panTo(firstPOI.point);
+            }
+            else {
+                map.centerAndZoom(firstPOI.city, 14);
+            }
+        }
+    }
+
+    function addMark(poi) {
+        var marker = new BMap.Marker(poi.point);
+        var content = "地址: " + poi.address
+            + "<br/>"
+            + "电话: " + poi.phoneNumber
+            + "<br/>"
+            + "<br/>"
+            + "精确匹配: " + (poi.isAccurate? "是" : "<font color='red'>否</font>")
+            + "<br/>"
+            + "原始查询: " + poi.rawQuery;
+        marker.addEventListener("click", function(e){
+            var searchInfoWindow = new BMapLib.SearchInfoWindow(map, content, {
+                title  : poi.title,
+                width  : 290,
+                height : 105,
+                panel  : "panel",
+                enableAutoPan : true,
+                searchTypes   :[
+                    BMAPLIB_TAB_SEARCH,
+                    BMAPLIB_TAB_TO_HERE,
+                    BMAPLIB_TAB_FROM_HERE
+                ]
+            });
+            searchInfoWindow.open(marker);
+        });
+        map.addOverlay(marker);
+    }
+</script>
+</body>
+</html>

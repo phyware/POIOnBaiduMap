@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="initial-scale=1.0, user-scalable=no" />
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<title>Show POI in Baidu Map</title>
+<meta name="description" content="Upload a file containing POI, show in Baidu Map" />
+<meta name="description" content="上传POI文件, 在百度地图中显示" />
+<meta name="description" content="自带: 工银亚洲内地见证网点-北上广深" />
+
+<style type="text/css">
+    html{height:100%}
+    body{height:100%;margin:0px;padding:0px}
+    #container{height:85%}
+    #poilist{width: 100%;}
+</style>
+    <script src="http://api.map.baidu.com/api?v=1.4" type="text/javascript"></script>
+</head>
+
+<body>
+    <div id="container"></div>
+    <div style="height: 15%; overflow: auto">
+        <div>
+            <select stype="float:left" id="Preset">
+                <option value="" disabled="disabled" selected="selected">Please select a preset list</option>
+                <option value="Data/ICBCAsia.Beijing.txt">工银亚洲-北京</option>
+                <option value="2">工银亚洲-上海</option>
+            </select>
+            or
+            <input type="file" id="Upload" />
+        <div>
+        <div id="poilist"></div>
+    </div>
+
+<script type="text/javascript">
+    var map = new BMap.Map("container");
+    var point = new BMap.Point(116.404, 39.915);
+    map.centerAndZoom(point, 15);
+    map.addControl(new BMap.MapTypeControl());
+    map.addControl(new BMap.GeolocationControl());
+
+    var local = new BMap.LocalSearch(map, {
+            renderOptions:{map: map, panel:"poilist"},
+            pageCapacity:1
+    });
+
+    document.getElementById('Upload').onchange = function(){
+        var file = this.files[0];
+        readAndShow(file);
+    };
+
+    document.getElementById('Preset').onchange = function(){
+        readUri(this.value, readAndShow);
+    };
+
+    function readUri(path, callback) {
+        var xhr = new XMLHttpRequest(); 
+        xhr.open("GET", path); 
+        xhr.responseType = "blob";//force the HTTP response, response-type header to be blob
+        xhr.onload = function() 
+        {
+            var blob = xhr.response;//xhr.response is now a blob object
+            callback(blob);
+        }
+        xhr.send();
+    }
+
+    function readFile(file, callback) {
+        var reader = new FileReader();
+        reader.onload = function(progressEvent){
+            var lines = this.result.replace('\t', ' ').split('\n');
+            callback(lines);
+        };
+
+        reader.readAsText(file);
+    }
+
+    function showInMap(queries) {
+        local.search(queries);
+        var results = local.getResults();
+        console.log(results);
+    }
+
+    function readAndShow(file) {
+        if (file == undefined && file.type.match(textType)) { return; }
+
+        readFile(file, showInMap);
+    }
+</script>
+</body>
+</html>
